@@ -175,6 +175,59 @@ details:not([open]) > :not(summary) {display: none;}
 .mobile-menu-options strong,.mobile-menu-options small {display: block;}
 .mobile-menu-options small {margin-top: 5px; color: var(--muted); font-weight: 400;}
 
+.insight-tabs {display: flex; flex-direction: row; flex-wrap: wrap; gap: 8px; margin-bottom: 24px;}
+.insight-tabs button {background: #fff; color: var(--ink); border: 1px solid var(--line); min-height: 44px;}
+.insight-tabs button:hover {background: var(--sky-surface); color: var(--ink);}
+.insight-tabs button.selected {background: var(--green); border-color: var(--green); color: #fff;}
+.scenario-cards {display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 18px; align-items: stretch;}
+.scenario-card {display: flex; flex-direction: column; padding: 22px;}
+.scenario-card.current {border: 2px solid var(--green);}
+.scenario-card h3 {margin-top: 10px; font-size: 20px;}
+.scenario-card>.badge {align-self: flex-start; white-space: normal;}
+.scenario-card>button {margin-top: auto;}
+.insight-facts {margin: 20px 0;}
+.insight-facts>div {display: flex; gap: 10px; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 12px;}
+.insight-facts dt {color: var(--muted);}
+.insight-facts dd {margin: 0; text-align: right; font-weight: 600;}
+.score-equation {padding: 14px; border-radius: 12px; background: var(--gold-surface); margin-bottom: 18px;}
+.score-equation strong,.score-equation small {display: block;}
+.score-equation small {margin-top: 7px; line-height: 1.7;}
+.blocker {padding: 16px 0; border-top: 1px solid var(--line); font-size: 13px;}
+.blocker small {display: block;}
+.recovery-options {display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px;}
+.recovery-options button {flex-wrap: wrap;}
+.recovery-options small {display: block; flex-basis: 100%;}
+.insight-filters {display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 16px;}
+.insight-filters label {flex: 1; min-width: 140px; max-width: 300px;}
+.impact-weeks {display: grid; grid-template-columns: repeat(auto-fill,minmax(60px,1fr)); gap: 8px;}
+.impact-weeks button {flex-direction: column; min-height: 62px; background: var(--sky-surface);}
+.impact-weeks button.has-eclo {background: var(--gold-surface); border-color: #c89a14;}
+.impact-weeks button.selected {outline: 2px solid var(--green); outline-offset: 1px;}
+.impact-weeks span {font-size: 12px; color: var(--muted);}
+.network-line h4 {font-size: 14px; margin: 22px 0 10px;}
+.network-stations {display: grid; grid-template-columns: repeat(10,minmax(0,1fr)); gap: 5px;}
+.network-stations button {flex-direction: column; padding: 10px 2px; font-size: 11px; min-width: 0; border: 0; background: var(--sky-surface);}
+.network-stations button>span {width: 17px; height: 17px; border: 2px solid #79979b; background: #fff; border-radius: 50%;}
+.network-stations .occupied>span {background: var(--green); border-color: var(--green);}
+.network-stations .extended>span {background: var(--gold); border-color: #a57400;}
+.network-stations button.selected {outline: 2px solid var(--green);}
+.network-legend {display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; color: var(--muted);}
+.network-legend span:nth-child(2) {color: var(--green);}
+.network-legend span:nth-child(3) {color: #80600c;}
+.station-detail {padding: 16px; margin-top: 18px; background: var(--sky-surface); border-radius: 12px;}
+.station-detail h4 {margin: 0 0 12px;}
+.station-detail button {margin: 4px; max-width: 100%; flex-wrap: wrap;}
+.submission-files {display: grid; gap: 12px; margin: 20px 0;}
+.submission-files article {border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0;}
+.submission-files b {font-size: 13px; overflow-wrap: anywhere;}
+.submission-files code {font-size: 12px; white-space: normal; overflow-wrap: anywhere; line-height: 1.7;}
+.handover-result textarea {min-height: 340px; font-size: 13px;}
+.change-types {grid-template-columns: repeat(auto-fit,minmax(105px,1fr));}
+@media (max-width: 1100px) {
+  .scenario-cards {grid-template-columns: minmax(0,1fr);}
+  .network-stations {grid-template-columns: repeat(5,minmax(0,1fr));}
+}
+
 @media (min-width: 901px) and (max-height: 680px) {
   .rail {padding-block: 12px;}
   .rail .brand-lockup small,.rail .rail-caption {display: none;}

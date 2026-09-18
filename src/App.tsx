@@ -4,6 +4,7 @@ import type { AssistantRequest, AssistantResult, Chat, Forecast, Person, State }
 import { Overview, ScheduleView } from './PlanningViews';
 import { CrewWorkspace, RiskWorkspace } from './PeopleAndRisk';
 import { AssistantView } from './AssistantView';
+import { InsightsWorkspace } from './InsightsWorkspace';
 import { formatDate, Metric, Modal, policies, type Scenario } from './ui';
 
 const API=import.meta.env.VITE_API_URL ?? '/api';
@@ -25,14 +26,15 @@ const navigation=[
   {id:'Crew roster',label:'Your crew',icon:Users},
   {id:'Risk forecast',label:'Test a change',icon:Activity},
   {id:'Assistant',label:'AI assistant',icon:Bot},
-  {id:'Checks & data',label:'Checks & data',icon:ShieldCheck},
+  {id:'Checks & data',label:'Insights & checks',icon:ShieldCheck},
 ];
-const titles:Record<string,string>={'Overview':'Let’s plan a better night.','Schedule':'Schedule','Crew roster':'Your crew','Risk forecast':'Test a change','Assistant':'AI assistant','Checks & data':'Checks & data'};
+const titles:Record<string,string>={'Overview':'Let’s plan a better night.','Schedule':'Schedule','Crew roster':'Your crew','Risk forecast':'Test a change','Assistant':'AI assistant','Checks & data':'Plan insights & checks'};
 
 export default function App(){
   const [data,setData]=useState<State|null>(null),[scenario,setScenario]=useState<Scenario>('A'),[view,setView]=useState('Overview');
   const [busy,setBusy]=useState('Loading your workspace'),[error,setError]=useState(''),[notice,setNotice]=useState('');
   const [forecast,setForecast]=useState<Forecast|null>(null),[week,setWeek]=useState(11),[duration,setDuration]=useState(1),[location,setLocation]=useState('SEC:BET:H01_H02:EB'),[absent,setAbsent]=useState<string[]>([]);
+  const [capacity,setCapacity]=useState<number|null>(null),[noEclo,setNoEclo]=useState(false);
   const [scheduleQuery,setScheduleQuery]=useState(''),[prompt,setPrompt]=useState(''),[help,setHelp]=useState(false),[rebuildConfirm,setRebuildConfirm]=useState(false);
   const [chat,setChat]=useState<Chat[]>(initialChat);
   const [retryRequest,setRetryRequest]=useState<AssistantRequest|null>(null);
@@ -40,7 +42,7 @@ export default function App(){
   const [history,setHistory]=useState<{id:string;scenario:string;created_at:string;risk_band:string}[]>([]);
   const working=useRef(false);
   const absentKey=absent.join('|');
-  useEffect(()=>setForecast(null),[week,duration,location,absentKey]);
+  useEffect(()=>setForecast(null),[week,duration,location,absentKey,capacity,noEclo]);
   useEffect(()=>{window.scrollTo({top:0});},[view]);
   useEffect(()=>{
     let active=true;setBusy('Loading your workspace');setNotice('');
@@ -63,7 +65,7 @@ export default function App(){
   async function rebuild(){setRebuildConfirm(false);await action('Rebuilding your plan',async()=>{await api('/plan',{scenario});await load();setForecast(null);setNotice('Your fresh plan is ready. Crew skills, leave and track constraints have been checked.');});}
   async function runRisk(){
     await action('Checking the change and replanning',async()=>{
-      const result=await api<Forecast>('/risk',{scenario,closure_location:location||null,week,duration,absent_ids:absent});setForecast(result);
+      const result=await api<Forecast>('/risk',{scenario,closure_location:capacity===null?location||null:null,capacity_location:capacity!==null?location:null,capacity_nights:capacity,no_eclo:noEclo,week,duration,absent_ids:absent});setForecast(result);
       setHistory(await api('/runs'));
     });
   }
@@ -129,11 +131,11 @@ export default function App(){
         {view==='Schedule'&&<ScheduleView key={scenario+'-'+scheduleQuery} plan={p} people={data.people} start={data.instance.start} initialQuery={scheduleQuery} exportUrl={API+'/export?scenario='+scenario}/>}
         {view==='Crew roster'&&<CrewWorkspace key={scheduleQuery} initialQuery={scheduleQuery} people={data.people} plan={p} busy={!!busy} error={error} save={savePerson} add={addPeople}/>}
         {view==='Risk forecast'&&<>
-          <RiskWorkspace data={data} week={week} duration={duration} location={location} absent={absent} busy={!!busy} forecast={forecast} setWeek={setWeek} setDuration={setDuration} setLocation={setLocation} setAbsent={setAbsent} run={()=>void runRisk()} apply={()=>void apply()} openSchedule={()=>open('Schedule')}/>
+          <RiskWorkspace data={data} week={week} duration={duration} location={location} absent={absent} capacity={capacity} noEclo={noEclo} setCapacity={setCapacity} setNoEclo={setNoEclo} busy={!!busy} forecast={forecast} setWeek={setWeek} setDuration={setDuration} setLocation={setLocation} setAbsent={setAbsent} run={()=>void runRisk()} apply={()=>void apply()} openSchedule={()=>open('Schedule')}/>
           <details className="panel history-panel"><summary>Previous previews <span className="count">{history.length}</span></summary><div className="history">{history.map(r=><button disabled={!!busy} key={r.id} onClick={()=>void action('Opening saved preview',async()=>{setForecast(await api('/runs/'+r.id));})}><strong>Scenario {r.scenario} · {r.risk_band} impact</strong><small>{new Date(r.created_at.endsWith('Z')?r.created_at:r.created_at+'Z').toLocaleString()}</small><ChevronRightIcon/></button>)}{!history.length&&<p className="muted">Your previews will appear here after the first simulation.</p>}</div></details>
         </>}
         {view==='Assistant'&&<AssistantView chat={chat} prompt={prompt} setPrompt={setPrompt} ask={text=>void ask(text)} clearChat={clearChat} busy={!!busy} data={data} forecast={forecast} openForecast={()=>open('Risk forecast')} openResult={(target,query,nextScenario)=>{if(nextScenario&&nextScenario!==scenario)setScenario(nextScenario as Scenario);open(target,query);}} retry={retryRequest?()=>void sendAssistant(retryRequest):undefined} test={()=>void action('Checking AI connection',async()=>{const result=await api<{message:string}>('/ai/test',{});await load();setNotice(result.message);})}/>}
-    {view==='Checks & data'&&<><Metrics items={[[p.audit.violations.length,'Violations','Independent output audit'],[p.audit.checked_accesses,'Activity-nights checked','Including named crew'],[m.objective,'Objective penalty','Lower is better; meaningful for complete valid plans'],[m.remaining_workload,'Remaining work units','Must be zero to export']]}/><div className="two-col"><section className="panel"><Heading kicker="LOCAL VALIDATION" title={p.audit.passed?'All implemented checks passed':'Plan needs attention'}/>{p.audit.checks.map(check=><div className="check" key={check}><CheckCircle2 size={17}/>{check}</div>)}{p.audit.violations.map((v,i)=><p className="violation" key={i}><b>{v.rule}</b> — {v.detail}</p>)}<div className="note">These are PLiZ’s local checks. The organisers’ reference validator is not included, so this is not a claim of official validation.</div></section><section className="panel"><Heading kicker="DATA & ASSUMPTIONS" title={data.source}/><p>{data.instance.start} · {data.instance.horizon}-week input horizon · {p.activities.length} activities</p><p className="muted">{p.method}</p><ul>{p.assumptions.map(a=><li key={a}>{a}</li>)}</ul><a className="text-link" href="https://github.com/aochinwen/NebulaX-Hackathon-ProblemStatement/blob/main/PS1/PS1_README.md" target="_blank" rel="noreferrer">Read the problem statement ↗</a><hr/><label>Load a new PS1 instance (all eight CSVs)<input type="file" accept=".csv" multiple disabled={!!busy} onChange={e=>{const files=Array.from(e.target.files??[]);if(!files.length)return;void action('Validating and loading instance',async()=>{const form=new FormData();files.forEach(f=>form.append('files',f));const response=await fetch(API+'/instance',{method:'POST',body:form});if(!response.ok){const result=await response.json();throw new Error(result.detail);}await load();setForecast(null);setNotice('Instance loaded and scheduled.');});e.target.value='';}}/></label><button disabled={!!busy} onClick={()=>void action('Restoring official instance',async()=>{await api('/instance/reset',{});await load();setForecast(null);setNotice('Official synthetic instance restored.');})}>Restore official instance</button></section></div></>}
+    {view==='Checks & data'&&<InsightsWorkspace data={data} apiBase={API} selectScenario={setScenario} open={open}><Metrics items={[[p.audit.violations.length,'Violations','Independent output audit'],[p.audit.checked_accesses,'Activity-nights checked','Including named crew'],[m.objective,'Objective penalty','Lower is better; meaningful for complete valid plans'],[m.remaining_workload,'Remaining work units','Must be zero to export']]}/><div className="two-col"><section className="panel"><Heading kicker="LOCAL VALIDATION" title={p.audit.passed?'All implemented checks passed':'Plan needs attention'}/>{p.audit.checks.map(check=><div className="check" key={check}><CheckCircle2 size={17}/>{check}</div>)}{p.audit.violations.map((v,i)=><p className="violation" key={i}><b>{v.rule}</b> — {v.detail}</p>)}<div className="note">These are PLiZ’s local checks. The organisers’ reference validator is not included, so this is not a claim of official validation.</div></section><section className="panel"><Heading kicker="DATA & ASSUMPTIONS" title={data.source}/><p>{data.instance.start} · {data.instance.horizon}-week input horizon · {p.activities.length} activities</p><p className="muted">{p.method}</p><ul>{p.assumptions.map(a=><li key={a}>{a}</li>)}</ul><a className="text-link" href="https://github.com/aochinwen/NebulaX-Hackathon-ProblemStatement/blob/main/PS1/PS1_README.md" target="_blank" rel="noreferrer">Read the problem statement ↗</a><hr/><label>Load a new PS1 instance (all eight CSVs)<input type="file" accept=".csv" multiple disabled={!!busy} onChange={e=>{const files=Array.from(e.target.files??[]);if(!files.length)return;void action('Validating and loading instance',async()=>{const form=new FormData();files.forEach(f=>form.append('files',f));const response=await fetch(API+'/instance',{method:'POST',body:form});if(!response.ok){const result=await response.json();throw new Error(result.detail);}await load();setForecast(null);setNotice('Instance loaded and scheduled.');});e.target.value='';}}/></label><button disabled={!!busy} onClick={()=>void action('Restoring official instance',async()=>{await api('/instance/reset',{});await load();setForecast(null);setNotice('Official synthetic instance restored.');})}>Restore official instance</button></section></div></InsightsWorkspace>}
 
         <footer><span><Database size={13}/>{data.public_demo?'Shared demo · Changes are visible to everyone':'Saved to workspace · PLiZ demo'}</span><span>Planning starts {formatDate(data.instance.start,true)} · Synthetic data</span></footer>
       </div>:!busy?<section className="panel empty"><h2>Let’s reconnect your workspace.</h2><p>The local service isn’t responding. Check that start.ps1 is running, then try again.</p><button className="primary" onClick={()=>void action('Reconnecting',async()=>{await load();})}>Try again</button></section>:<div className="skeleton-layout" aria-hidden="true"><div/><div/><div/><div/></div>}

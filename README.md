@@ -6,7 +6,7 @@
 
 Built for [NebulaX Problem Statement 1: Railway Track Access Optimisation](https://github.com/aochinwen/NebulaX-Hackathon-ProblemStatement/blob/main/PS1/PS1_README.md).
 
-[Repository](https://github.com/Pskm12E/Nus_Hackathon) · [Deployment](docs/DEPLOYMENT.md) · [Planner details](docs/ARCHITECTURE.md) · [Proposal draft](SUBMISSION.md)
+[Repository](https://github.com/Pskm12E/Nus_Hackathon) · [Deployment](docs/DEPLOYMENT.md) · [Planner details](docs/ARCHITECTURE.md) · [Proposal draft](SUBMISSION.md) · [Requirement review](docs/REQUIREMENTS_REVIEW.md)
 
 **[Open the live demo](https://pliz.4bytedigi.com)** — no login required.
 
@@ -25,9 +25,9 @@ PLiZ brings requests, schedules, crew and disruption analysis into one workspace
 | **Overview** | Computed workload, local-check results, late contracts in red, and weekly work chart. |
 | **Schedule** | Weekly shifts, all assignments, timeline, crew details, co-sharing and contract milestones. |
 | **Your crew** | Add people, edit skills and shift limits, and record leave. Starts with 24 fictional crew. |
-| **Test a change** | Simulate a track closure or named absence, compare impacts, and apply a reviewed plan while freezing earlier weeks. |
+| **Test a change** | Simulate closures, named absences, lower access quotas or no-ECLO periods; compare impacts and apply a reviewed plan while freezing earlier weeks. |
 | **AI assistant** | Explain the schedule or execute requests to add crew, update leave, create a job, rebuild a plan or apply a preview. |
-| **Checks & data** | Review the audit and assumptions, import eight PS1 CSVs, or restore the organiser sample. |
+| **Insights & checks** | Compare A/B/C, explain delays, view ECLO footprints and crew/contract loads, generate draft handovers, and inspect CSV readiness. The Checks tab retains data import and local validation. |
 
 The responsive interface supports desktop, tablet and phone use. The supplied PLiZ wordmark appears in the app, with the standalone icon used for the browser tab. Compact sidebar navigation keeps the workspace controls within the screen; short or narrow screens use bottom navigation.
 
@@ -57,6 +57,10 @@ Try these in **AI assistant**:
 > Add a job under C001 at the Beta H02 eastbound platform, starting week 20, requiring 1 work unit, priority 2.
 
 > Simulate SEC:BET:H01_H02:EB closed in week 11 for 2 weeks.
+
+> Simulate SEC:BET:H01_H02:EB capacity to 1 night in week 11 for 2 weeks.
+
+> Simulate no ECLO in week 11 for 2 weeks.
 
 After reviewing the preview: **“Apply this plan.”**
 
@@ -137,10 +141,11 @@ The requested hosted version is a **public shared demo without a login**. Visito
 npm run build
 ```
 
-Tests use temporary databases and cover scenarios, crew availability, frozen history, audit failures, stale previews, assistant actions, retries, hosting guards and provider errors. Optional real-model check: `.venv/Scripts/python.exe scripts/verify_assistant_live.py` (uses a separate database and incurs API usage).
+Tests use temporary databases and cover scenarios, crew availability, frozen history, audit failures, stale previews, assistant actions, retries, hosting guards and provider errors, plus access-quota restrictions, ECLO exposure, scenario comparisons, CSV round-trips and handover drafts. Optional real-model check: `.venv/Scripts/python.exe scripts/verify_assistant_live.py` (uses a separate database and incurs API usage).
 
 ## Limitations
 
+- ECLO exposure shows synthetic engineering footprints, not passenger counts, journey delays or confirmed station closures. Handover text is an unsent draft.
 - Local audit success is **not official judge validation**. The organiser validator is not included.
 - The heuristic does not guarantee optimal schedules or feasibility for every hidden instance.
 - Crew dispatch assumes one qualified Engineer plus one Technician per activity-night; there is no minute-by-minute or depot-travel model.

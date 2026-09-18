@@ -29,6 +29,19 @@ def affected_week(options, week):
     return options.get('week', 1) <= week < options.get('week', 1) + options.get('duration', 1)
 
 
+def capacity_at(instance, options, week, location):
+    if affected_week(options, week) and options.get('capacity_location') == location:
+        return options['capacity_nights']
+    return instance['supply'][location]
+
+
+def access_changes(before, after):
+    def signatures(rows):
+        return {(r['activity_id'], r['access_seq']): (r['week'], r['night'], tuple(sorted(r['crew_ids'])), r['eclo']) for r in rows}
+    old, new = signatures(before), signatures(after)
+    return sum(old.get(key) != new.get(key) for key in old.keys() | new.keys())
+
+
 def available(p, week, options):
     return p['active'] and week not in leave_weeks(p['unavailable']) and not (affected_week(options, week) and p['id'] in options.get('absent_ids', []))
 
@@ -36,7 +49,10 @@ def available(p, week, options):
 def generate(instance, roster, scenario='A', options=None, reference=None):
     options = options or {}
     candidates = [_generate(instance, roster, scenario, options, reference, order) for order in range(3)]
-    return min(candidates, key=lambda p: (p['metrics']['remaining_workload'], len(p['audit']['violations']), p['metrics']['objective'], p['metrics']['changed_accesses'], p['metrics']['last_week']))
+    chosen=min(candidates, key=lambda p: (p['metrics']['remaining_workload'], len(p['audit']['violations']), p['metrics']['objective'], p['metrics']['changed_accesses'], p['metrics']['last_week']))
+    chosen['search']=dict(evaluated=len(candidates),method='Three greedy orderings; choose complete work, fewer audit violations, then lower scenario penalty and fewer assignment changes.',
+                          candidates=[dict(order=name,selected=p is chosen,objective=p['metrics']['objective'],remaining=p['metrics']['remaining_workload'],violations=len(p['audit']['violations']),changed=p['metrics']['changed_accesses']) for name,p in zip(['Priority first','Least slack first','Deadline first'],candidates)])
+    return chosen
 
 
 def _generate(instance, roster, scenario, options, reference, order):
@@ -46,7 +62,12 @@ def _generate(instance, roster, scenario, options, reference, order):
     crew_week, crew_total = Counter(), Counter()
     crew_slot, eclo_weeks = defaultdict(set), defaultdict(set)
     rows, finished = [], {}
-    assigned, reasons = defaultdict(list), defaultdict(Counter)
+    assigned, reasons, blockers = defaultdict(list), defaultdict(Counter), defaultdict(dict)
+    def blocked(aid, rule, week, night, detail, other=None, locations=None):
+        key=(rule, other)
+        if key not in blockers[aid] and len(blockers[aid]) < 6:
+            blockers[aid][key]=dict(rule=rule,week=week,night=night,detail=detail,
+                                   other_activity=other,locations=(locations or [])[:6])
     old = {(r['activity_id'], r['access_seq']): r for r in (reference or {}).get('accesses', [])}
     collisions = {(a, b): conflict(acts[a], acts[b]) for a, b in combinations(acts, 2)}
     def collides(a, b):
@@ -72,6 +93,11 @@ def _generate(instance, roster, scenario, options, reference, order):
                 commit(acts[r['activity_id']], r['week'], r['night'], [by_person[x] for x in r['crew_ids']], r['eclo'])
     limit = min(104, max(instance['horizon'], max(a['start_week'] for a in acts.values()))+52)
     for week in range(options.get('week', 1) if reference else 1, limit+1):
+        for aid,a in acts.items():
+            pred=a['predecessor_activity_id']
+            if remaining[aid] and a['start_week']<=week and pred and finished.get(pred,1000)>=week:
+                reasons[aid]['Waiting for predecessor completion']+=1
+                blocked(aid,'precedence',week,None,f'{pred} must finish in a strictly earlier week before {aid} can start.',pred)
         ready = [a for aid, a in acts.items() if remaining[aid] and a['start_week'] <= week and
                  (not a['predecessor_activity_id'] or finished.get(a['predecessor_activity_id'], 1000) < week)]
         def key(a):
@@ -85,22 +111,45 @@ def _generate(instance, roster, scenario, options, reference, order):
             target = old.get((aid, len(assigned[aid])+1))
             if reference and target and target['week'] > week: continue
             if scenario == 'B' and week > p['deadline_week']:
-                reasons[aid]['Fixed deadline reached'] += 1; continue
+                reasons[aid]['Fixed deadline reached'] += 1
+                blocked(aid,'deadline',week,None,'Scenario B cannot schedule work after the planned completion date.')
+                continue
             if affected_week(options, week) and options.get('closure_location') in a['footprint']:
-                reasons[aid]['Closure intersects work or exclusion buffer'] += 1; continue
+                reasons[aid]['Closure intersects work or exclusion buffer'] += 1
+                blocked(aid,'closure',week,None,'The simulated closure intersects this activity’s work or safety footprint.',locations=[options['closure_location']])
+                continue
             choices = []
             for night in range(1, 8):
                 peers = slots[week, night]
                 budget = budgets[cid, a['activity_type'], week]
                 if night not in budget and len(budget) >= p['number_of_maximum_access_per_week']:
-                    reasons[aid]['Contract weekly access limit'] += 1; continue
+                    reasons[aid]['Contract weekly access limit'] += 1
+                    blocked(aid,'weekly_budget',week,night,f'{cid} already uses its {p["number_of_maximum_access_per_week"]} granted nights this week.')
+                    continue
                 if sum(r['contract_number'] == cid and r['activity_type'] == a['activity_type'] for r in peers) >= p['number_of_workfronts']:
-                    reasons[aid]['Concurrent workfront limit'] += 1; continue
-                if any(collides(aid, r['activity_id']) for r in peers):
-                    reasons[aid]['Possession, buffer or live-rail conflict'] += 1; continue
-                if any(sum(loc in acts[r['activity_id']]['locations'] for r in peers) >= 4 for loc in a['locations']): continue
-                if scenario != 'B' and any(len(supply[week, loc] | {night}) > instance['supply'][loc]+(scenario == 'C') for loc in a['locations']):
-                    reasons[aid]['Location weekly supply exhausted'] += 1; continue
+                    reasons[aid]['Concurrent workfront limit'] += 1
+                    blocked(aid,'workfront',week,night,f'{cid} already uses its {p["number_of_workfronts"]} concurrent workfronts on this night.')
+                    continue
+                collision=next((r for r in peers if collides(aid,r['activity_id'])),None)
+                if collision:
+                    reasons[aid]['Possession, buffer or live-rail conflict'] += 1
+                    other=acts[collision['activity_id']]
+                    shared=sorted(set(a['footprint']) & set(other['footprint']))
+                    rule='Live closure (including opposite-bound/interchange isolation)' if 'Live' in (a['nature'],other['nature']) else 'Incompatible possession or overlapping safety buffers'
+                    blocked(aid,'collision',week,night,f'{rule}: {other["activity_id"]} ({other["contract_number"]}) occupies this night.',other['activity_id'],shared)
+                    continue
+                full=[loc for loc in a['locations'] if sum(loc in acts[r['activity_id']]['locations'] for r in peers)>=4]
+                if full:
+                    reasons[aid]['Four-party co-sharing limit']+=1
+                    blocked(aid,'mix',week,night,'This location already has four work parties in its shared possession.',locations=full)
+                    continue
+                exhausted=[loc for loc in a['locations'] if
+                           (affected_week(options,week) and options.get('capacity_location')==loc and len(supply[week,loc] | {night})>options['capacity_nights']) or
+                           (scenario!='B' and len(supply[week,loc] | {night})>capacity_at(instance,options,week,loc)+(scenario=='C'))]
+                if exhausted:
+                    reasons[aid]['Location weekly supply exhausted'] += 1
+                    blocked(aid,'capacity',week,night,'No permitted access-night remains at the listed location(s). Compatible work may still co-share an occupied slot.',locations=exhausted)
+                    continue
                 team = []
                 for role in ['Engineer', 'Technician']:
                     pool = [person for person in roster if person['role'] == role and skill(a) in person['skills'].split(';') and
@@ -109,12 +158,14 @@ def _generate(instance, roster, scenario, options, reference, order):
                         pool.sort(key=lambda person: (0 if target and person['id'] in target['crew_ids'] else 1, crew_week[week, person['id']], crew_total[person['id']], person['name']))
                         team.append(pool[0])
                 if len(team) != 2:
-                    reasons[aid]['Qualified crew unavailable'] += 1; continue
-                excess = sum(night not in supply[week, loc] and len(supply[week, loc]) >= instance['supply'][loc] for loc in a['locations'])
+                    reasons[aid]['Qualified crew unavailable'] += 1
+                    blocked(aid,'crew',week,night,f'A qualified {skill(a)} Engineer and Technician were not both available within shift limits.')
+                    continue
+                excess = sum(night not in supply[week, loc] and len(supply[week, loc]) >= capacity_at(instance,options,week,loc) for loc in a['locations'])
                 choices.append(((0 if target and (week, night) == (target['week'], target['night']) else 1, excess, night), night, team))
             if choices:
                 _, night, team = min(choices, key=lambda x: x[0])
-                eclo = int(scenario != 'A' and remaining[aid] >= 3 and remaining[aid] > 2*max(0,p['deadline_week']-week+1))
+                eclo = int(scenario != 'A' and not (options.get('no_eclo') and affected_week(options,week)) and remaining[aid] >= 3 and remaining[aid] > 2*max(0,p['deadline_week']-week+1))
                 if eclo and scenario == 'C' and any(max(eclo_weeks[line] | {week})-min(eclo_weeks[line] | {week}) > 1 for line in a['affected_lines']): eclo = 0
                 commit(a, week, night, team, eclo)
         if not any(remaining.values()): break
@@ -126,7 +177,7 @@ def _generate(instance, roster, scenario, options, reference, order):
         delay = max(0, (date.fromisoformat(completion)-date.fromisoformat(deadline)).days) if completion else None
         weighted += (delay or 0)*{1:100,2:10,3:1}[a['contract_priority']]*{1:1.3,2:1.2,3:1}[a['activity_priority']]
         activities.append(dict(a, accesses=assigned[aid], completion_week=finished.get(aid), completion_date=completion,
-                               deadline=deadline, overrun_days=delay, remaining_workload=remaining[aid]/2, reasons=[x for x,_ in reasons[aid].most_common(3)]))
+                               deadline=deadline, overrun_days=delay, remaining_workload=remaining[aid]/2, reasons=[x for x,_ in reasons[aid].most_common(3)],blockers=list(blockers[aid].values())))
     contracts=[]
     for cid,p in instance['projects'].items():
         jobs=[a for a in activities if a['contract_number']==cid]
@@ -134,8 +185,8 @@ def _generate(instance, roster, scenario, options, reference, order):
         delay=max(0,(date.fromisoformat(completion)-date.fromisoformat(p['planned_completion_date'])).days) if completion else None
         contracts.append(dict(contract_number=cid,description=p['contract_description'],priority=p['contract_priority'],completion_date=completion,
                               planned_completion_date=p['planned_completion_date'],overrun_days=delay,status='Incomplete' if completion is None else 'Late' if delay else 'On plan'))
-    excess=sum(max(0,len(nights)-instance['supply'][loc]) for (_,loc),nights in supply.items())
-    changed=sum((r['week'],r['night'],set(r['crew_ids'])) != (old[r['activity_id'],r['access_seq']]['week'],old[r['activity_id'],r['access_seq']]['night'],set(old[r['activity_id'],r['access_seq']]['crew_ids'])) for r in rows if (r['activity_id'],r['access_seq']) in old)
+    excess=sum(max(0,len(nights)-capacity_at(instance,options,w,loc)) for (w,loc),nights in supply.items())
+    changed=access_changes(reference['accesses'],rows) if reference else 0
     metrics=dict(accesses=len(rows),last_week=max((r['week'] for r in rows),default=0),remaining_workload=sum(remaining.values())/2,
                  late_contracts=sum(c['status']=='Late' for c in contracts),overrun_days=sum(c['overrun_days'] or 0 for c in contracts),
                  eclo_nights=sum(r['eclo'] for r in rows),excess_nights=excess,changed_accesses=changed,
@@ -162,6 +213,7 @@ def audit(instance, roster, plan):
         if affected_week(options,w) and options.get('closure_location') in a['footprint']: fail('closure',a['activity_id'])
         if r['eclo']:
             if scenario=='A': fail('eclo',a['activity_id'])
+            if options.get('no_eclo') and affected_week(options,w): fail('eclo_restriction',a['activity_id'])
             for line in a['affected_lines']: line_eclo[line].add(w)
         if len(r['crew_ids'])!=2 or {people.get(pid,{}).get('role') for pid in r['crew_ids']}!={'Engineer','Technician'}: fail('crew_roles',a['activity_id'])
         for pid in r['crew_ids']:
@@ -188,7 +240,8 @@ def audit(instance, roster, plan):
     for (cid,_,w),nights in budgets.items():
         if len(nights)>instance['projects'][cid]['number_of_maximum_access_per_week']: fail('weekly_budget',f'{cid}, week {w}')
     for (w,loc),nights in supply.items():
-        if scenario!='B' and len(nights)>instance['supply'][loc]+(scenario=='C'): fail('capacity',f'{loc}, week {w}')
+        if scenario!='B' and len(nights)>capacity_at(instance,options,w,loc)+(scenario=='C'): fail('capacity',f'{loc}, week {w}')
+        if affected_week(options,w) and options.get('capacity_location')==loc and len(nights)>options['capacity_nights']: fail('capacity_reduction',f'{loc}, week {w}')
     for (pid,w,n),count in person_slots.items():
         if count>1: fail('crew_double_booking',f'{pid}, week {w}, night {n}')
     for (pid,w),count in person_weeks.items():
@@ -197,7 +250,7 @@ def audit(instance, roster, plan):
         for line,weeks in line_eclo.items():
             if max(weeks)-min(weeks)>1: fail('eclo_window',line)
     return dict(passed=not violations,violations=violations,checked_accesses=len(plan['accesses']),official_validator=False,
-                checks=['Full workload','Start dates and predecessor order','Exclusion buffers and legal mixes','Location supply','Weekly contract budgets and workfronts','ECLO policy','Crew skills, leave, weekly limits and double bookings','Disruption closures'])
+                checks=['Full workload','Start dates and predecessor order','Exclusion buffers and legal mixes','Location supply','Weekly contract budgets and workfronts','ECLO policy','Crew skills, leave, weekly limits and double bookings','Disruption closures, capacity reductions and ECLO restrictions'])
 
 
 def forecast(instance, roster, baseline, options):
@@ -205,15 +258,15 @@ def forecast(instance, roster, baseline, options):
     changes=[]; direct=set()
     for row in baseline['accesses']:
         a=next(a for a in instance['activities'] if a['activity_id']==row['activity_id'])
-        if affected_week(options,row['week']) and (options.get('closure_location') in a['footprint'] or set(row['crew_ids']) & set(options.get('absent_ids',[]))): direct.add(a['activity_id'])
+        if affected_week(options,row['week']) and (options.get('closure_location') in a['footprint'] or options.get('capacity_location') in a['locations'] or (options.get('no_eclo') and row['eclo']) or set(row['crew_ids']) & set(options.get('absent_ids',[]))): direct.add(a['activity_id'])
     before={a['activity_id']:a for a in baseline['activities']}
     for a in candidate['activities']:
         b=before[a['activity_id']]
-        signature=lambda x:[(r['week'],r['night'],r['crew_ids']) for r in x['accesses']]
+        signature=lambda x:[(r['week'],r['night'],r['crew_ids'],r['eclo']) for r in x['accesses']]
         if signature(a)!=signature(b):
             delay=max(0,(a['completion_week']-b['completion_week'])*7) if a['completion_week'] and b['completion_week'] else None
             changes.append(dict(activity_id=a['activity_id'],contract_number=a['contract_number'],priority=a['contract_priority'],before=b['completion_date'],after=a['completion_date'],delay_days=delay,
-                                reason='Direct closure / absence' if a['activity_id'] in direct else 'Dependency or shared-resource reallocation'))
+                                reason='Direct disruption / access restriction' if a['activity_id'] in direct else 'Dependency or shared-resource reallocation'))
     band='Critical' if candidate['metrics']['remaining_workload'] else 'High' if any(c['priority']==1 and c['delay_days'] for c in changes) else 'Watch' if any(c['delay_days'] for c in changes) else 'Low'
     return dict(risk_band=band,directly_affected=len(direct),changed_activities=changes,max_delay_days=max((c['delay_days'] or 0 for c in changes),default=0),
                 additional_overrun_days=max(0,candidate['metrics']['overrun_days']-baseline['metrics']['overrun_days']),candidate=candidate,
