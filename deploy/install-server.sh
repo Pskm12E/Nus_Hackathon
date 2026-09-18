@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Install a reviewed release; does not modify DNS or existing tunnel routes.
 set -euo pipefail
+umask 022
 if [[ $EUID -ne 0 || $# -ne 1 ]]; then
   echo 'Usage: sudo bash deploy/install-server.sh /absolute/staged-release-directory' >&2
   exit 64
@@ -17,6 +18,10 @@ install -d -o pliz -g pliz -m 700 /var/lib/pliz
 cp -a "$source_dir/backend" "$source_dir/data" "$source_dir/dist" "$release/"
 install -m 644 "$source_dir/requirements.txt" "$release/requirements.txt"
 install -d -m 755 "$release/storage"
+if ! python3 -c 'import ensurepip' >/dev/null 2>&1; then
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y python3-venv
+fi
 python3 -m venv "$release/.venv"
 "$release/.venv/bin/pip" install -r "$release/requirements.txt"
 chown -R root:root "$release"
