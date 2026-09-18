@@ -8,7 +8,7 @@ Built for [NebulaX Problem Statement 1: Railway Track Access Optimisation](https
 
 [Repository](https://github.com/Pskm12E/Nus_Hackathon) · [Deployment](docs/DEPLOYMENT.md) · [Planner details](docs/ARCHITECTURE.md) · [Proposal draft](SUBMISSION.md)
 
-Deployment target: **https://pliz.4bytedigi.com**.
+**[Open the live demo](https://pliz.4bytedigi.com)** — no login required.
 
 ![PLiZ overview with the supplied logo](docs/images/pliz-overview.png)
 

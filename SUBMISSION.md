@@ -8,7 +8,7 @@ PLiZ helps railway planners turn competing maintenance requests into a coordinat
 
 ## What tech stack was used to build this solution?
 
-The frontend uses React 19, TypeScript and Vite, with custom responsive CSS and Lucide icons. The backend uses Python and FastAPI, with Pydantic for request validation and SQLAlchemy for persistence in a local SQLite database. A custom deterministic scheduling heuristic evaluates three job orderings and selects a complete, locally checked plan using the scenario objective and assignment changes. Separate audit logic checks the generated schedule. OpenAI's Responses API, using gpt-5.6-luna, powers natural-language interpretation and explanations grounded in schedule data. API credentials remain on the backend. Python's CSV and ZIP libraries handle PS1 imports and exports. Pytest and FastAPI's test client cover scheduling, disruptions, persistence, validation and error handling; browser checks verify the main user flows. The application currently runs locally; public deployment is a remaining submission step.
+The frontend uses React 19, TypeScript and Vite, with custom responsive CSS and Lucide icons. The backend uses Python and FastAPI, with Pydantic for request validation and SQLAlchemy for persistence in SQLite. A custom deterministic scheduling heuristic evaluates three job orderings and selects a complete, locally checked plan using the scenario objective and assignment changes. Separate audit logic checks the generated schedule. OpenAI's Responses API, using gpt-5.6-luna, powers natural-language interpretation and explanations grounded in schedule data. API credentials remain on the backend. Python's CSV and ZIP libraries handle PS1 imports and exports. Pytest and FastAPI's test client cover scheduling, disruptions, persistence, validation and error handling; browser checks verify the main user flows. The public demo runs on the 4bytedigi server using systemd, with HTTPS provided through Cloudflare Tunnel.
 
 ## What challenges did you face, and how did you overcome them?
 
@@ -20,7 +20,7 @@ The main challenge was coordinating track constraints, work dependencies and cre
 |---|---|---|
 | Pitch video URL | Not published | Record a three-minute demo, upload it to YouTube, and paste the shareable URL. |
 | GitHub repository URL | Published | https://github.com/Pskm12E/Nus_Hackathon |
-| Prototype URL | Server activation pending | Target: https://pliz.4bytedigi.com — verify HTTPS after the administrator runs the staged installer. |
+| Prototype URL | Published and verified | https://pliz.4bytedigi.com |
 
 `http://127.0.0.1:5173/` works only on the machine running the app. It is not a public prototype URL. A DBstudios project is a database workspace, not the hosted app.
 

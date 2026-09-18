@@ -1,6 +1,8 @@
 # Deploy PLiZ
 
-Target: **https://pliz.4bytedigi.com**, hosted on 4bytedigi.
+Live demo: **https://pliz.4bytedigi.com**, hosted on 4bytedigi.
+
+Activated on 19 September 2026 (Singapore time). Public HTTPS, all three planning scenarios, and a read-only AI response were verified. The service is enabled to start at boot. Each scenario scheduled all 54 activities with no remaining workload and passed the app's local audit; this is not official judge validation.
 
 The requested deployment has no login and uses synthetic inputs and fictional crew. Visitors edit the same workspace. Real operational use needs individual identities and permissions.
 
