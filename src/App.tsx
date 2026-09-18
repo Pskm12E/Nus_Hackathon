@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Activity, ArrowRight, Bot, CalendarDays, CheckCircle2, ChevronDown, Database, Gauge, HelpCircle, Menu, RefreshCw, ShieldCheck, Users, X, Zap } from 'lucide-react';
+import { Activity, ArrowRight, Bot, CalendarDays, CheckCircle2, ChevronDown, Database, Gauge, HelpCircle, Menu, RefreshCw, ShieldCheck, Users, X } from 'lucide-react';
 import type { AssistantRequest, AssistantResult, Chat, Forecast, Person, State } from './types';
 import { Overview, ScheduleView } from './PlanningViews';
 import { CrewWorkspace, RiskWorkspace } from './PeopleAndRisk';
@@ -9,7 +9,7 @@ import { formatDate, Metric, Modal, policies, type Scenario } from './ui';
 const API=import.meta.env.VITE_API_URL ?? '/api';
 function Brand({onClick}:{onClick:()=>void}){
   return <button className="brand brand-lockup" onClick={onClick} aria-label="PLiZ home">
-    <span className="brand-art"><img className="brand-symbol" src="/brand/pliz-icon.png" alt=""/><img className="brand-wordmark" src="/brand/pliz-wordmark.png" alt="PLiZ"/></span>
+    <span className="brand-art"><img className="brand-wordmark" src="/brand/pliz-wordmark.png" alt="PLiZ"/></span>
     <small>PLANNING, SIMPLIFIED.</small>
   </button>;
 }
@@ -117,7 +117,7 @@ export default function App(){
       <div className="workspace-tag"><span className="status-dot"/>NebulaX workspace<ChevronDown size={13}/></div>
       <span className="overline rail-caption">YOUR WORKSPACE</span>
       <nav aria-label="Main navigation">{navigation.map(({id,label,icon:Icon})=><button disabled={!!busy} aria-current={view===id?'page':undefined} className={view===id?'active':''} key={id} onClick={()=>open(id)}><Icon size={19}/><span>{label}</span>{id==='Crew roster'&&<small>{data?.people.length??'—'}</small>}{id==='Assistant'&&<span className="nav-ai">AI</span>}</button>)}</nav>
-      <div className="rail-bottom"><div className="rail-help"><span className="tile-icon"><SparkleIcon/></span><strong>A little help goes a long way.</strong><p>Ask your assistant about the plan, people or a change.</p><button disabled={!!busy} onClick={()=>open('Assistant')}>Ask a question <ArrowRight size={14}/></button></div><button className="help-button" onClick={()=>setHelp(true)}><HelpCircle size={17}/>How to use PLiZ</button><div className="user-chip"><span className="avatar">OC</span><div><strong>Operations controller</strong><small>Demo workspace</small></div></div></div>
+      <div className="rail-bottom"><button className="help-button" onClick={()=>setHelp(true)}><HelpCircle size={17}/>How to use PLiZ</button><div className="user-chip"><span className="avatar">OC</span><div><strong>Operations controller</strong><small>Demo workspace</small></div></div></div>
     </aside>
     <main id="main-content"><header><div><div className="breadcrumbs">Workspace <span>/</span> {navigation.find(n=>n.id===view)?.label}</div><h1>{titles[view]}</h1></div><div className="header-actions"><span className="connection"><i className={data?'status-dot':'status-dot pending'}/>{data?'Workspace connected':'Connecting'}</span><button className="icon" aria-label="Refresh workspace" disabled={!!busy} onClick={()=>void action('Refreshing workspace',async()=>{await load();setForecast(null);})}><RefreshCw size={17}/></button><button className="icon" aria-label="Help" onClick={()=>setHelp(true)}><HelpCircle size={18}/></button></div></header>
       <div className="plan-bar"><div><span className="plan-label">PLANNING APPROACH</span><label className="sr-only" htmlFor="scenario">Planning approach</label><select id="scenario" value={scenario} disabled={!!busy} onChange={e=>setScenario(e.target.value as Scenario)}>{Object.entries(policies).map(([s,policy])=><option key={s} value={s}>{s} · {policy.name}</option>)}</select><span className="policy-description">{policies[scenario].description}</span></div><button disabled={!!busy||!data} onClick={()=>p&&Object.keys(p.options).length?setRebuildConfirm(true):void rebuild()}><RefreshCw size={15}/>Rebuild plan</button></div>
@@ -149,5 +149,4 @@ export default function App(){
 }
 function Heading({kicker,title}:{kicker:string;title:string}){return <div className="panel-heading"><div><span className="overline">{kicker}</span><h3>{title}</h3></div></div>;}
 function Metrics({items}:{items:[number,string,string][]}){return <div className="metrics">{items.map(([value,label,detail])=><Metric key={label} value={value} label={label} detail={detail}/>)}</div>;}
-function SparkleIcon(){return <Zap size={19}/>;}
 function ChevronRightIcon(){return <ArrowRight size={15}/>;}

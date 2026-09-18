@@ -29,7 +29,7 @@ PLiZ brings requests, schedules, crew and disruption analysis into one workspace
 | **AI assistant** | Explain the schedule or execute requests to add crew, update leave, create a job, rebuild a plan or apply a preview. |
 | **Checks & data** | Review the audit and assumptions, import eight PS1 CSVs, or restore the organiser sample. |
 
-The responsive interface supports desktop, tablet and phone use. The supplied PLiZ icon and wordmark appear in the app and browser tab.
+The responsive interface supports desktop, tablet and phone use. The supplied PLiZ wordmark appears in the app, with the standalone icon used for the browser tab. Compact sidebar navigation keeps the workspace controls within the screen; short or narrow screens use bottom navigation.
 
 ## Where the automation happens
 
