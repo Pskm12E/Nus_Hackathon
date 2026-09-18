@@ -42,6 +42,8 @@ The systemd service runs as a dedicated `pliz` user, stores data under `/var/lib
 4. Create a proxied CNAME for `pliz` to that tunnel's `UUID.cfargotunnel.com` address.
 5. Verify before sharing the URL.
 
+For the staged 4bytedigi release, the combined command is `sudo bash /home/pyie/pliz-release/deploy/activate-4bytedigi.sh`. It installs missing Python venv support if needed, creates the isolated PLiZ service, waits for health, then inserts only the PLiZ route into the locally managed tunnel. The tunnel script keeps a backup and restores it if the connector restart fails. The DNS record is configured separately in Cloudflare.
+
 The installer does not modify DNS or other services. Updates install a new release while preserving data and environment. For rollback, repoint `/opt/pliz/current` to the previous release and restart `pliz`; database migrations are not automated.
 
 ```bash

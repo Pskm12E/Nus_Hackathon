@@ -19,8 +19,8 @@ The main challenge was coordinating track constraints, work dependencies and cre
 | Field | Current status | What you need |
 |---|---|---|
 | Pitch video URL | Not published | Record a three-minute demo, upload it to YouTube, and paste the shareable URL. |
-| GitHub repository URL | Not published | Create and publish a repository containing the app, tests and setup instructions. Exclude `.env`, the private database and API keys. |
-| Prototype URL | Local only | Deploy the frontend and backend with authentication and server-side secrets. Paste the public HTTPS URL after testing it from outside your computer. |
+| GitHub repository URL | Published | https://github.com/Pskm12E/Nus_Hackathon |
+| Prototype URL | Server activation pending | Target: https://pliz.4bytedigi.com — verify HTTPS after the administrator runs the staged installer. |
 
 `http://127.0.0.1:5173/` works only on the machine running the app. It is not a public prototype URL. A DBstudios project is a database workspace, not the hosted app.
 
