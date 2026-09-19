@@ -102,7 +102,8 @@ def test_scores_and_comparisons_reconcile_with_actual_plans(setup):
         score=score_breakdown(p)
         assert score['eligible']
         assert score['total']==pytest.approx(score['delay']+score['extra_access']+score['eclo'])
-        assert p['search']['evaluated']==3
+        assert p['search']['evaluated']==len(p['search']['candidates'])
+        assert p['search']['evaluated']>=3
         assert sum(c['selected'] for c in p['search']['candidates'])==1
     assert report['same_conditions']
     for issue in report['details']['issues']:

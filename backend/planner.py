@@ -5,7 +5,7 @@ from itertools import combinations
 from math import ceil
 from .domain import conflict, week_end
 
-PLANNER_VERSION = '2026-09-19-possession-closures-v2'
+PLANNER_VERSION = '2026-09-19-scenario-c-tradeoffs-v3'
 
 
 def leave_weeks(value):
@@ -51,13 +51,27 @@ def available(p, week, options):
 def generate(instance, roster, scenario='A', options=None, reference=None):
     options = options or {}
     candidates = [_generate(instance, roster, scenario, options, reference, order) for order in range(3)]
-    chosen=min(candidates, key=lambda p: (p['metrics']['remaining_workload'], len(p['audit']['violations']), p['metrics']['objective'], p['metrics']['changed_accesses'], p['metrics']['last_week']))
-    chosen['search']=dict(evaluated=len(candidates),method='Three greedy orderings; choose complete work, fewer audit violations, then lower scenario penalty and fewer assignment changes.',
-                          candidates=[dict(order=name,selected=p is chosen,objective=p['metrics']['objective'],remaining=p['metrics']['remaining_workload'],violations=len(p['audit']['violations']),changed=p['metrics']['changed_accesses']) for name,p in zip(['Priority first','Least slack first','Deadline first'],candidates)])
+    names=['Priority first','Least slack first','Deadline first']
+    rank=lambda p:(p['metrics']['remaining_workload'], len(p['audit']['violations']), p['metrics']['objective'], p['metrics']['changed_accesses'], p['metrics']['last_week'])
+    if scenario=='C':
+        # In C, a small low-priority slip can cost less than two ECLO nights.
+        # Replan complete schedules to measure downstream effects as well. Keep
+        # the original candidates, so this bounded search cannot worsen them.
+        seed=min(candidates,key=rank)
+        optional=sorted({r['activity_id'] for r in seed['accesses'] if r['eclo'] and r['week']>=options.get('week',1)})[:8]
+        for aid in optional:
+            for order,name in enumerate(names[:3]):
+                candidates.append(_generate(instance,roster,scenario,options,reference,order,standard_only={aid}))
+                names.append(f'{name} · standard nights for {aid}')
+    chosen=min(candidates,key=rank)
+    method='Three greedy orderings'+('; compare optional ECLO against standard-night alternatives in Scenario C' if scenario=='C' else '')+'. Choose complete work, fewer audit violations, then lower scenario penalty and fewer assignment changes.'
+    chosen['method']='Bounded deterministic scheduling search; optimality is not guaranteed.'
+    chosen['search']=dict(evaluated=len(candidates),method=method,
+                          candidates=[dict(order=name,selected=p is chosen,objective=p['metrics']['objective'],remaining=p['metrics']['remaining_workload'],violations=len(p['audit']['violations']),changed=p['metrics']['changed_accesses']) for name,p in zip(names,candidates)])
     return chosen
 
 
-def _generate(instance, roster, scenario, options, reference, order):
+def _generate(instance, roster, scenario, options, reference, order, standard_only=frozenset()):
     acts = {a['activity_id']: a for a in instance['activities']}
     remaining = {aid: a['total_accesses'] * 2 for aid, a in acts.items()}
     slots, supply, budgets = defaultdict(list), defaultdict(set), defaultdict(set)
@@ -174,7 +188,7 @@ def _generate(instance, roster, scenario, options, reference, order):
                 choices.append(((0 if target and (week, night) == (target['week'], target['night']) else 1, excess, night), night, team))
             if choices:
                 _, night, team = min(choices, key=lambda x: x[0])
-                eclo = int(scenario != 'A' and not (options.get('no_eclo') and affected_week(options,week)) and remaining[aid] >= 3 and remaining[aid] > 2*max(0,p['deadline_week']-week+1))
+                eclo = int(scenario != 'A' and aid not in standard_only and not (options.get('no_eclo') and affected_week(options,week)) and remaining[aid] >= 3 and remaining[aid] > 2*max(0,p['deadline_week']-week+1))
                 if eclo and scenario == 'C' and any(max(eclo_weeks[line] | {week})-min(eclo_weeks[line] | {week}) > 1 for line in a['affected_lines']): eclo = 0
                 commit(a, week, night, team, eclo)
         if not any(remaining.values()): break

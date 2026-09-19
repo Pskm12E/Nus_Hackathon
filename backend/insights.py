@@ -18,13 +18,23 @@ def score_breakdown(plan):
 def explain_issue(instance, activity, scenario):
     a=activity
     reasons=list(a['reasons']); blockers=list(a.get('blockers',[]))
-    yield_per_night=1 if scenario=='A' else 1.5
-    earliest=a['start_week']+ceil(a['total_accesses']/yield_per_night)-1
+    if scenario=='A':
+        nights=a['total_accesses']
+        policy='Scenario A forbids ECLO.'
+    elif scenario=='C':
+        # C has at most two ECLO accesses per activity: at most one extra
+        # standard work unit in total, not 1.5x yield for every week.
+        nights=max(ceil(a['total_accesses']/1.5),a['total_accesses']-1)
+        policy='Scenario C allows at most two ECLO accesses per activity, within one two-week window per affected line.'
+    else:
+        nights=ceil(a['total_accesses']/1.5)
+        policy='This lower bound already assumes maximum ECLO yield.'
+    earliest=a['start_week']+nights-1
     deadline=instance['projects'][a['contract_number']]['deadline_week']
     if earliest>deadline:
         detail=(f'{a["total_accesses"]} work units starting in week {a["start_week"]}, with at most one access per week, '
                 f'cannot finish before week {earliest}; the target is week {deadline}. '
-                +('Scenario A forbids ECLO.' if scenario=='A' else 'This lower bound already assumes maximum ECLO yield.'))
+                +policy)
         reasons.insert(0,'Workload cannot fit between its planned start and target')
         blockers.insert(0,dict(rule='workload_window',week=a['start_week'],night=None,detail=detail,other_activity=None,locations=[]))
     return dict(activity_id=a['activity_id'],contract_number=a['contract_number'],overrun_days=a['overrun_days'],remaining=a['remaining_workload'],
