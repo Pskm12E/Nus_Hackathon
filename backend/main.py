@@ -19,16 +19,22 @@ from .domain import load_official, prepare, public_instance, provenance, csv_tex
 from .planner import generate, forecast, leave_weeks, PLANNER_VERSION
 from .assistant_commands import Intent, WRITE_ACTIONS, requests_change, is_read_only_request, ROUTING_PROMPT
 from .security import install_security
+from .public_reports import router as public_reports_router
+from .public_reports.operator import router as public_reports_operator_router
+from .public_reports.delivery import report_lifespan
 from .insights import comparison, brief, score_breakdown
 from .submission import tables as submission_tables, HEADERS as SUBMISSION_HEADERS, inspect_submission
 
 initialise()
-app=FastAPI(title='PLiZ',version='0.2.0')
+app=FastAPI(title='PLiZ',version='0.2.0',lifespan=report_lifespan)
+app.include_router(public_reports_router)
+app.include_router(public_reports_operator_router)
 lock=threading.RLock()
 cache={}
 ai_status={'connected':False,'message':'Not tested yet'}
 
 security=install_security(app)
+app.state.security=security
 
 def instance(): return prepare(get_setting('instance') or load_official())
 def revision():
@@ -436,4 +442,12 @@ def copilot(payload:Message):
         return finish_chat(request_id,{**chat_result(request_id,text),'model':'Local planner','forecast':result,'ai_error':ai_failure(exc)})
 
 dist=Path(__file__).resolve().parents[1]/'dist'
+@app.get('/public', include_in_schema=False)
+@app.get('/public/', include_in_schema=False)
+def public_app():
+    from fastapi.responses import FileResponse
+    if not (dist/'index.html').exists():
+        raise HTTPException(503, 'Build the frontend with npm run build first.')
+    return FileResponse(dist/'index.html')
+
 if dist.exists(): app.mount('/',StaticFiles(directory=dist,html=True),name='frontend')

@@ -20,6 +20,8 @@ PLiZ brings requests, schedules, crew and disruption analysis into one workspace
 
 ## Features
 
+**PLiZ Public:** a separate mobile app at [`/public/`](http://127.0.0.1:5173/public/) for taking photos, submitting issue reports and revisiting saved reports. Reports are delivered to DBStudios and displayed in the main workspace's **Public's report** inbox. See the [public app guide](docs/PUBLIC_APP.md) and [DBStudios setup](docs/DBSTUDIOS_REPORTS.md). Reports do not automatically dispatch crews.
+
 | Workspace | What it does |
 |---|---|
 | **Overview** | Computed workload, local-check results, late contracts in red, and weekly work chart. |
@@ -126,13 +128,13 @@ cp .env.example .env
 
 Set `OPENAI_API_KEY` in `.env` for AI actions. Optionally change `OPENAI_MODEL` to a model your account can access. The key stays on the backend; never put secrets in `VITE_` variables. Without a key, planning and deterministic summaries still work, but general AI interpretation is unavailable. Check access in **AI assistant → Connection details → Check connection**.
 
-SQLite stores crew, overrides, plans, forecasts and action receipts in `storage/nightshift.db` by default. The legacy filename is retained so existing workspaces continue to load. No DBstudios sync is configured.
+SQLite stores crew, overrides, plans, forecasts and action receipts in `storage/nightshift.db` by default. It also keeps public reports, private photo bytes and the delivery queue. Configure `DBSTUDIOS_API_URL` and `DBSTUDIOS_API_KEY` to deliver reports to the NightShift AI project's `public_reports` table. The operator inbox reads reports from DBStudios; planner data stays local. See [DBStudios setup](docs/DBSTUDIOS_REPORTS.md).
 
 ## Deploy
 
 See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the 4bytedigi service and optional Docker setup.
 
-The requested hosted version is a **public shared demo without a login**. Visitors can change the same synthetic workspace. Keep real personal or operational data out of this instance. Server-side AI limits constrain requests; secrets and runtime databases are excluded from Git.
+The planning workspace is a **public shared demo without a login**. Visitors can change the same synthetic workspace. The **Public's report** inbox and its photos require an operator login in production. Server-side AI limits constrain requests; secrets and runtime databases are excluded from Git.
 
 ## Verify
 

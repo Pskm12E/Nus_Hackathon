@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Activity, ArrowRight, Bot, CalendarDays, CheckCircle2, ChevronDown, Database, Gauge, HelpCircle, Menu, RefreshCw, ShieldCheck, Users, X } from 'lucide-react';
+import { Activity, ArrowRight, Bot, CalendarDays, CheckCircle2, ChevronDown, Database, Gauge, HelpCircle, Menu, MessageSquareText, RefreshCw, ShieldCheck, Users, X } from 'lucide-react';
 import type { AssistantRequest, AssistantResult, Chat, Forecast, Person, State } from './types';
 import { Overview, ScheduleView } from './PlanningViews';
 import { CrewWorkspace, RiskWorkspace } from './PeopleAndRisk';
 import { AssistantView } from './AssistantView';
 import { InsightsWorkspace } from './InsightsWorkspace';
+import PublicReportsWorkspace from './public-reports/PublicReportsWorkspace';
 import { formatDate, Metric, Modal, policies, type Scenario } from './ui';
 
 const API=import.meta.env.VITE_API_URL ?? '/api';
@@ -27,8 +28,9 @@ const navigation=[
   {id:'Risk forecast',label:'Test a change',icon:Activity},
   {id:'Assistant',label:'AI assistant',icon:Bot},
   {id:'Checks & data',label:'Insights & checks',icon:ShieldCheck},
+  {id:'Public reports',label:"Public's report",icon:MessageSquareText},
 ];
-const titles:Record<string,string>={'Overview':'Let’s plan a better night.','Schedule':'Schedule','Crew roster':'Your crew','Risk forecast':'Test a change','Assistant':'AI assistant','Checks & data':'Plan insights & checks'};
+const titles:Record<string,string>={'Overview':'Let’s plan a better night.','Schedule':'Schedule','Crew roster':'Your crew','Risk forecast':'Test a change','Assistant':'AI assistant','Checks & data':'Plan insights & checks','Public reports':"Public's report"};
 
 export default function App(){
   const [data,setData]=useState<State|null>(null),[scenario,setScenario]=useState<Scenario>('A'),[view,setView]=useState('Overview');
@@ -122,11 +124,11 @@ export default function App(){
       <div className="rail-bottom"><button className="help-button" onClick={()=>setHelp(true)}><HelpCircle size={17}/>How to use PLiZ</button><div className="user-chip"><span className="avatar">OC</span><div><strong>Operations controller</strong><small>Demo workspace</small></div></div></div>
     </aside>
     <main id="main-content"><header><div><div className="breadcrumbs">Workspace <span>/</span> {navigation.find(n=>n.id===view)?.label}</div><h1>{titles[view]}</h1></div><div className="header-actions"><span className="connection"><i className={data?'status-dot':'status-dot pending'}/>{data?'Workspace connected':'Connecting'}</span><button className="icon" aria-label="Refresh workspace" disabled={!!busy} onClick={()=>void action('Refreshing workspace',async()=>{await load();setForecast(null);})}><RefreshCw size={17}/></button><button className="icon" aria-label="Help" onClick={()=>setHelp(true)}><HelpCircle size={18}/></button></div></header>
-      <div className="plan-bar"><div><span className="plan-label">PLANNING APPROACH</span><label className="sr-only" htmlFor="scenario">Planning approach</label><select id="scenario" value={scenario} disabled={!!busy} onChange={e=>setScenario(e.target.value as Scenario)}>{Object.entries(policies).map(([s,policy])=><option key={s} value={s}>{s} · {policy.name}</option>)}</select><span className="policy-description">{policies[scenario].description}</span></div><button disabled={!!busy||!data} onClick={()=>p&&Object.keys(p.options).length?setRebuildConfirm(true):void rebuild()}><RefreshCw size={15}/>Rebuild plan</button></div>
+      {view!=='Public reports'&&<div className="plan-bar"><div><span className="plan-label">PLANNING APPROACH</span><label className="sr-only" htmlFor="scenario">Planning approach</label><select id="scenario" value={scenario} disabled={!!busy} onChange={e=>setScenario(e.target.value as Scenario)}>{Object.entries(policies).map(([s,policy])=><option key={s} value={s}>{s} · {policy.name}</option>)}</select><span className="policy-description">{policies[scenario].description}</span></div><button disabled={!!busy||!data} onClick={()=>p&&Object.keys(p.options).length?setRebuildConfirm(true):void rebuild()}><RefreshCw size={15}/>Rebuild plan</button></div>}
       {busy&&<div className="banner loading" role="status"><span className="spinner"/>{busy}…</div>}
       {error&&<div className="banner error" role="alert"><span>{error}</span><button aria-label="Dismiss error" onClick={()=>setError('')}><X size={17}/></button></div>}
       {notice&&<div className="banner success" role="status"><CheckCircle2 size={18}/><span>{notice}</span><button aria-label="Dismiss notification" onClick={()=>setNotice('')}><X size={17}/></button></div>}
-      {data&&p&&m?<div className="page-content">
+      {view==='Public reports'?<PublicReportsWorkspace/>:data&&p&&m?<div className="page-content">
         {view==='Overview'&&<Overview data={data} open={open}/>}
         {view==='Schedule'&&<ScheduleView key={scenario+'-'+scheduleQuery} plan={p} people={data.people} start={data.instance.start} initialQuery={scheduleQuery} exportUrl={API+'/export?scenario='+scenario}/>}
         {view==='Crew roster'&&<CrewWorkspace key={scheduleQuery} initialQuery={scheduleQuery} people={data.people} plan={p} busy={!!busy} error={error} save={savePerson} add={addPeople}/>}
@@ -142,9 +144,9 @@ export default function App(){
     </main>
     <nav className="mobile-nav" aria-label="Phone navigation">
       {navigation.filter(item=>['Overview','Schedule','Risk forecast','Assistant'].includes(item.id)).map(({id,label,icon:Icon})=><button key={id} disabled={!!busy} className={view===id?'active':''} aria-current={view===id?'page':undefined} aria-label={label} onClick={()=>open(id)}><Icon size={22}/><span>{id==='Risk forecast'?'Test change':id==='Assistant'?'Assistant':label}</span></button>)}
-      <button className={['Crew roster','Checks & data'].includes(view)?'active':''} aria-label="More workspace options" aria-haspopup="dialog" aria-expanded={mobileMenu} onClick={()=>setMobileMenu(true)}><Menu size={22}/><span>More</span></button>
+      <button className={['Crew roster','Checks & data','Public reports'].includes(view)?'active':''} aria-label="More workspace options" aria-haspopup="dialog" aria-expanded={mobileMenu} onClick={()=>setMobileMenu(true)}><Menu size={22}/><span>More</span></button>
     </nav>
-    {mobileMenu&&<Modal title="Your workspace" onClose={()=>setMobileMenu(false)}><p className="muted">Your crew, data and planning help.</p><div className="mobile-menu-options">{navigation.filter(item=>['Crew roster','Checks & data'].includes(item.id)).map(({id,label,icon:Icon})=><button key={id} disabled={!!busy} onClick={()=>open(id)}><span className="tile-icon"><Icon size={22}/></span><span><strong>{label}</strong><small>{id==='Crew roster'?'People, skills and availability':'Validation and GitHub source data'}</small></span><ArrowRight size={18}/></button>)}<button onClick={()=>{setMobileMenu(false);setHelp(true);}}><span className="tile-icon"><HelpCircle size={22}/></span><span><strong>How to use PLiZ</strong><small>A quick guide to the workspace</small></span><ArrowRight size={18}/></button></div></Modal>}
+    {mobileMenu&&<Modal title="Your workspace" onClose={()=>setMobileMenu(false)}><p className="muted">Your crew, data and planning help.</p><div className="mobile-menu-options">{navigation.filter(item=>['Crew roster','Checks & data','Public reports'].includes(item.id)).map(({id,label,icon:Icon})=><button key={id} disabled={!!busy} onClick={()=>open(id)}><span className="tile-icon"><Icon size={22}/></span><span><strong>{label}</strong><small>{id==='Crew roster'?'People, skills and availability':id==='Public reports'?'Reports and photos from the public':'Validation and GitHub source data'}</small></span><ArrowRight size={18}/></button>)}<button onClick={()=>{setMobileMenu(false);setHelp(true);}}><span className="tile-icon"><HelpCircle size={22}/></span><span><strong>How to use PLiZ</strong><small>A quick guide to the workspace</small></span><ArrowRight size={18}/></button></div></Modal>}
     {help&&<Modal title="A simple way to plan" onClose={()=>setHelp(false)}><p className="muted">Start with the existing demo plan. Everything below uses your current scenario.</p><ol className="help-steps"><li><b>Review the schedule</b><p>Browse by week. Open a shift to see its crew, track locations and dates.</p></li><li><b>Keep your crew up to date</b><p>Add people, choose their skills and enter leave. Saving automatically recalculates the generated plan.</p></li><li><b>Test before changing</b><p>Choose a closure or absence, preview the impact, then apply the plan when you’re happy with it.</p></li><li><b>Ask when you need context</b><p>The assistant can explain assignments and deadlines, or run a what-if preview for you.</p></li></ol><details><summary>Common terms</summary><dl className="detail-list"><div><dt>Activity</dt><dd>A maintenance job needing one or more night shifts.</dd></div><div><dt>Access</dt><dd>A night when a job is allowed to use a track section.</dd></div><div><dt>ECLO</dt><dd>Early closure / late opening: extended engineering hours.</dd></div><div><dt>Scenario</dt><dd>A planning policy that balances capacity and deadlines.</dd></div></dl></details><button className="primary full" onClick={()=>setHelp(false)}>Got it — let’s plan <ArrowRight size={16}/></button></Modal>}
     {rebuildConfirm&&<Modal title="Start from a fresh plan?" onClose={()=>setRebuildConfirm(false)}><p>This replaces the currently applied disruption plan with a fresh schedule using your latest crew and original track availability. Your saved preview history stays available.</p><div className="modal-actions"><button onClick={()=>setRebuildConfirm(false)}>Keep current plan</button><button className="primary" onClick={()=>void rebuild()}>Rebuild plan</button></div></Modal>}
   </div>;
