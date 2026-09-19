@@ -72,15 +72,24 @@ def prepare(texts: dict):
         if (line,bound)!=(line2,bound2): raise ValueError('Activity endpoints must be on the same line and bound.')
         lo,hi=sorted([lo,hi]); lo-=lo%2; hi+=hi%2
         own={loc for loc,(ln,b,pos) in positions.items() if (ln,b)==(line,bound) and lo<=pos<=hi}
-        buffer=2*buffers[p['nature_of_activity']]
+        # A consist buffer extends through the adjoining tunnel, stopping before
+        # its far platform. Live isolation also includes that far platform.
+        buffer_sectors=buffers[p['nature_of_activity']]
+        buffer=2*buffer_sectors if p['nature_of_activity']=='Live' else max(0,2*buffer_sectors-1)
         footprint={loc for loc,(ln,b,pos) in positions.items() if (ln,b)==(line,bound) and lo-buffer<=pos<=hi+buffer}
         affected_lines={line}
         if mirror[p['nature_of_activity']]:
             footprint|={loc[:-2]+('WB' if loc.endswith('EB') else 'EB') for loc in list(footprint)}
         if p['nature_of_activity']=='Live' and any(':H01_H02:' in loc or ':H01:' in loc or ':H02:' in loc for loc in footprint):
-            for loc in positions:
-                if ':H01_H02:' in loc or ':H01:' in loc or ':H02:' in loc:
-                    footprint.add(loc); affected_lines.add(positions[loc][0])
+            # Power isolation at the interchange carries the Live buffer onto
+            # the other line too, on both bounds, not only the three hub sites.
+            for ln in lines:
+                hubs=[pos for loc,(line_code,b,pos) in positions.items()
+                      if line_code==ln and b=='EB' and (':H01:' in loc or ':H02:' in loc)]
+                if hubs:
+                    footprint|={loc for loc,(line_code,_,pos) in positions.items()
+                                if line_code==ln and min(hubs)-buffer<=pos<=max(hubs)+buffer}
+                    affected_lines.add(ln)
         a.update(line=line,bound=bound,locations=sorted(own),footprint=sorted(footprint),
                  affected_lines=sorted(affected_lines),access_type=p['access_type'],nature=p['nature_of_activity'],
                  contract_priority=p['contract_priority'],start_week=max(1,(date.fromisoformat(a['planned_start_date'])-start).days//7+1))

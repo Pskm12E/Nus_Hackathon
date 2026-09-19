@@ -9,6 +9,45 @@ HEADERS={
 }
 
 
+def closure_violations(instance, occupancy):
+    """Check the weekly possession graph encoded in the exported CSV.
+
+    Sharing at any (location, week, group) joins activities into one possession.
+    Members are exempt from that possession's combined closure; external jobs
+    are not, even if their internal calendar nights differ. This interpretation
+    reproduces the 49 organiser-reported errors in our rejected Scenario A and
+    reports no closure errors for the organiser's published sample. It is a
+    local regression check, not the unpublished reference validator.
+    """
+    acts={a['activity_id']:a for a in instance['activities']}
+    groups=defaultdict(set); weeks=defaultdict(set)
+    for row in occupancy:
+        aid=row['activity_id']; week=int(row['week'])
+        groups[week,row['location_id'],row['co_share_group']].add(aid)
+        weeks[week].add(aid)
+    violations=[]
+    for week,ids in sorted(weeks.items()):
+        parent={aid:aid for aid in ids}
+        def root(aid):
+            while parent[aid]!=aid:
+                parent[aid]=parent[parent[aid]]
+                aid=parent[aid]
+            return aid
+        for (w,_,_),members in groups.items():
+            if w!=week: continue
+            members=sorted(members)
+            for aid in members[1:]: parent[root(aid)]=root(members[0])
+        possessions=defaultdict(set)
+        for aid in sorted(ids): possessions[root(aid)].add(aid)
+        for members in possessions.values():
+            closure=set().union(*(acts[aid]['footprint'] for aid in members))
+            for aid in sorted(ids-members):
+                hit=sorted(set(acts[aid]['locations']) & closure)
+                if hit:
+                    violations.append(dict(rule='closure',detail=f'wk{week}: {aid} inside closure of {sorted(members)[:3]} at {hit[:4]}'))
+    return violations
+
+
 def tables(instance, plan):
     granted=defaultdict(set)
     for r in plan['accesses']: granted[r['contract_number'],r['activity_type'],r['week']].add(r['night'])
@@ -28,7 +67,7 @@ def inspect_submission(instance, plan):
     parsed={name:csv_rows(text) for name,text in content.items()}
     acts={a['activity_id']:a for a in instance['activities']}
     workload=defaultdict(float); weekly=defaultdict(set); workfronts=defaultdict(set)
-    violations=[]
+    violations=[v['detail'] for v in closure_violations(instance,parsed['SCHEDULE_OCCUPANCY.csv'])]
     for r in parsed['SCHEDULE_ACCESS.csv']:
         a=acts[r['activity_id']]; p=instance['projects'][a['contract_number']]
         night=int(r['access_night']); w=int(r['week'])
@@ -45,5 +84,5 @@ def inspect_submission(instance, plan):
     if any(r['scenario']!=plan['scenario'] for r in parsed['RESULTS.csv']): violations.append('Mixed scenarios')
     return dict(passed=not violations and plan['audit']['passed'],official_validator=False,packaged=False,
                 violations=violations,files=[dict(name=name,columns=HEADERS[name],rows=len(rows)) for name,rows in parsed.items()],
-                checks=['Exact CSV headers','Full activity workload','Local contract/type/week access-night indices','Workfront caps after index conversion','Complete, unique occupancy rows','One scenario and all contracts in results'],
+                checks=['Exact CSV headers','Full activity workload','Local contract/type/week access-night indices','Workfront caps after index conversion','Complete, unique occupancy rows','Weekly possession-group closures after CSV conversion','One scenario and all contracts in results'],
                 explanation='In-memory CSV round-trip and PLiZ local audit only. No ZIP was generated or uploaded. The organiser’s validator is not published in the repository.')

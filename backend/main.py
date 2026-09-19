@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
 from .database import Person, Run, Setting, ChatRequest, Session, initialise, people, get_setting, set_setting
 from .domain import load_official, prepare, public_instance, provenance, csv_text, csv_rows, FILES
-from .planner import generate, forecast, leave_weeks
+from .planner import generate, forecast, leave_weeks, PLANNER_VERSION
 from .assistant_commands import Intent, WRITE_ACTIONS, requests_change, is_read_only_request, ROUTING_PROMPT
 from .security import install_security
 from .insights import comparison, brief, score_breakdown
@@ -34,12 +34,16 @@ def instance(): return prepare(get_setting('instance') or load_official())
 def revision():
     return hashlib.sha256(json.dumps([instance()['texts'],people()],sort_keys=True).encode()).hexdigest()[:20]
 def baseline(scenario):
-    rev=revision(); key=(rev,scenario)
+    rev=revision(); key=(rev,scenario,PLANNER_VERSION)
     saved=get_setting('plan_'+scenario)
-    if saved and saved.get('revision')==rev: return saved
+    current_saved=saved if saved and saved.get('revision')==rev else None
+    if current_saved and current_saved.get('planner_version')==PLANNER_VERSION: return current_saved
     if key not in cache:
         cache.clear() if len(cache)>10 else None
-        cache[key]=dict(generate(instance(),people(),scenario),revision=rev)
+        # Recompute legacy plans with the corrected rules, retaining applied
+        # restrictions. Never trust an old stored "audit passed" flag.
+        options=current_saved.get('options',{}) if current_saved else None
+        cache[key]=dict(generate(instance(),people(),scenario,options),revision=rev)
     return cache[key]
 
 class PersonInput(BaseModel):
@@ -185,7 +189,7 @@ def reset_instance():
 @app.get('/api/export')
 def export(scenario:Literal['A','B','C']='A'):
     with lock: plan=baseline(scenario); inst=instance()
-    if not plan['audit']['passed']: raise HTTPException(409,'Resolve incomplete workloads and audit violations before exporting.')
+    if not inspect_submission(inst,plan)['passed']: raise HTTPException(409,'Resolve incomplete workloads and CSV audit violations before exporting.')
     output=submission_tables(inst,plan)
     buffer=io.BytesIO()
     with zipfile.ZipFile(buffer,'w',zipfile.ZIP_DEFLATED) as z:

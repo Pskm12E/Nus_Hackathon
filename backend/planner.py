@@ -5,6 +5,8 @@ from itertools import combinations
 from math import ceil
 from .domain import conflict, week_end
 
+PLANNER_VERSION = '2026-09-19-possession-closures-v2'
+
 
 def leave_weeks(value):
     weeks = set()
@@ -130,13 +132,20 @@ def _generate(instance, roster, scenario, options, reference, order):
                     reasons[aid]['Concurrent workfront limit'] += 1
                     blocked(aid,'workfront',week,night,f'{cid} already uses its {p["number_of_workfronts"]} concurrent workfronts on this night.')
                     continue
-                collision=next((r for r in peers if collides(aid,r['activity_id'])),None)
+                # CSV possessions are checked across the week. A different
+                # internal dispatch night is not an exemption from another
+                # possession's closure. Compatible overlapping jobs must be
+                # placed together; incompatible jobs move to a different week.
+                collision=next((r for r in rows if r['week']==week and (
+                    collides(aid,r['activity_id']) if r['night']==night else
+                    bool(set(a['locations']) & set(acts[r['activity_id']]['footprint']) or
+                         set(a['footprint']) & set(acts[r['activity_id']]['locations'])))),None)
                 if collision:
                     reasons[aid]['Possession, buffer or live-rail conflict'] += 1
                     other=acts[collision['activity_id']]
                     shared=sorted(set(a['footprint']) & set(other['footprint']))
                     rule='Live closure (including opposite-bound/interchange isolation)' if 'Live' in (a['nature'],other['nature']) else 'Incompatible possession or overlapping safety buffers'
-                    blocked(aid,'collision',week,night,f'{rule}: {other["activity_id"]} ({other["contract_number"]}) occupies this night.',other['activity_id'],shared)
+                    blocked(aid,'collision',week,night,f'{rule}: {other["activity_id"]} ({other["contract_number"]}) holds a possession this week.',other['activity_id'],shared)
                     continue
                 full=[loc for loc in a['locations'] if sum(loc in acts[r['activity_id']]['locations'] for r in peers)>=4]
                 if full:
@@ -191,7 +200,7 @@ def _generate(instance, roster, scenario, options, reference, order):
                  late_contracts=sum(c['status']=='Late' for c in contracts),overrun_days=sum(c['overrun_days'] or 0 for c in contracts),
                  eclo_nights=sum(r['eclo'] for r in rows),excess_nights=excess,changed_accesses=changed,
                  objective=round((0 if scenario=='B' else weighted)+(0 if scenario=='A' else 7*excess+5*sum(r['eclo'] for r in rows)),2))
-    plan=dict(scenario=scenario,options=options,accesses=rows,activities=activities,contracts=contracts,metrics=metrics,
+    plan=dict(scenario=scenario,options=options,accesses=rows,activities=activities,contracts=contracts,metrics=metrics,planner_version=PLANNER_VERSION,
               method='Three-order greedy heuristic; optimality is not guaranteed.',
               assumptions=['One qualified Engineer and one Technician per activity-night; fictional crew.',
                            'One shift per person per night, with weekly limits and leave weeks.',
@@ -249,8 +258,11 @@ def audit(instance, roster, plan):
     if scenario=='C':
         for line,weeks in line_eclo.items():
             if max(weeks)-min(weeks)>1: fail('eclo_window',line)
+    # Validate what the judge receives, independently of internal night slots.
+    from .submission import closure_violations, tables
+    violations.extend(closure_violations(instance,tables(instance,plan)['SCHEDULE_OCCUPANCY.csv']))
     return dict(passed=not violations,violations=violations,checked_accesses=len(plan['accesses']),official_validator=False,
-                checks=['Full workload','Start dates and predecessor order','Exclusion buffers and legal mixes','Location supply','Weekly contract budgets and workfronts','ECLO policy','Crew skills, leave, weekly limits and double bookings','Disruption closures, capacity reductions and ECLO restrictions'])
+                checks=['Full workload','Start dates and predecessor order','Exclusion buffers and legal mixes','Exported weekly possession-group closures','Location supply','Weekly contract budgets and workfronts','ECLO policy','Crew skills, leave, weekly limits and double bookings','Disruption closures, capacity reductions and ECLO restrictions'])
 
 
 def forecast(instance, roster, baseline, options):
